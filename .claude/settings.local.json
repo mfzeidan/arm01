@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sysctl -n machdep.cpu.brand_string)",
+      "Bash(sysctl -n hw.memsize)",
+      "Bash(sysctl -n hw.ncpu)",
+      "Bash(system_profiler SPDisplaysDataType)",
+      "Bash(system_profiler SPHardwareDataType)",
+      "Bash(source ~/miniforge3*)",
+      "Bash(conda activate lerobot*)",
+      "Bash(python3*)",
+      "Bash(pip install*)",
+      "Bash(ssh*)",
+      "Bash(rsync*)",
+      "Bash(scp*)",
+      "Bash(lerobot-*)",
+      "Bash(chmod*)",
+      "Bash(openscad*)",
+      "WebFetch(domain:huggingface.co)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ]
+  }
+}
