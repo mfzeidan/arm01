@@ -10,14 +10,20 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 - [x] Conda env `lerobot` (Python 3.12, PyTorch 2.10.0, MPS available)
 - [x] Feetech servo SDK installed
 - [x] TPU compliant gripper STLs identified (SO-ARM100 repo)
+- [x] 2x USB cameras ordered (720p UVC, 120° DFOV, USB 2.0)
+- [x] Private GitHub repo created (mfzeidan/arm01)
+- [ ] Order dry-erase battle grid mat (~24x36", 1" squares)
+- [ ] Order TPU 95A filament (for compliant gripper, if needed)
 - [ ] Arm hardware arrives 2026-03-20 (Friday)
 - [ ] Motor setup + calibration
 - [ ] Camera mounting + discovery
-- [ ] Grid mat workspace setup
-- [ ] Pick-and-place training data collection
+- [ ] Grid mat workspace setup + coordinate labeling
+- [ ] Grid-to-joint-angle calibration (one-time)
+- [ ] Pick-and-place training data collection (50+ episodes)
 - [ ] ACT policy training on Jetson
 - [ ] Claude Vision coordinator script
-- [ ] End-to-end sock sorting test
+- [ ] 4-sock test (2 pairs, distinct colors)
+- [ ] Scale to 30 socks (15 pairs)
 
 ## Architecture
 
@@ -55,7 +61,7 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 |-----------|---------|
 | Robot Arm | SO-101 (follower + leader), Feetech STS3215 servos, arriving 2026-03-20 |
 | Gripper | Stock rigid (default) + TPU compliant (Fin Ray, print from SO-ARM100 repo) |
-| Cameras | 2x USB cameras (top-down + front/side angle) |
+| Cameras | 2x 720p USB 2.0 UVC, 120° DFOV (top-down + front/side angle) |
 | Compute (training) | NVIDIA Jetson Orin Nano Super Developer Kit |
 | Compute (data collection) | Mac Mini M4 16GB |
 | Compute (development) | MacBook Air M4 16GB |
@@ -149,7 +155,65 @@ lerobot-eval \
 |--------|--------|
 | Mac Air (dev) | Local — current machine |
 | Mac Mini | SSH from Mac Air (TODO: document IP/hostname) |
-| Jetson Orin Nano | SSH from Mac Air (TODO: document IP/hostname) |
+| Jetson Orin Nano | SSH from Mac Air — `ssh m@192.168.1.207` (alias: `ssh jetson`) |
+
+## Shopping List
+
+| Item | Status | Notes |
+|------|--------|-------|
+| SO-101 arm kit (leader + follower) | Arriving 2026-03-20 | Includes Feetech STS3215 servos |
+| 2x 720p USB cameras (120° DFOV) | Ordered | UVC, plug-and-play on Mac/Jetson |
+| Dry-erase battle grid mat (24x36") | TODO | 1" squares, label with chess-style coordinates (A-J, 1-12) |
+| TPU 95A filament (1kg, 1.75mm) | TODO | For compliant gripper — only if stock gripper fails on socks |
+| Test socks | TODO | 4-5 very distinct colors, cheap multi-packs for initial testing |
+
+## Sock Sorting Architecture (Claude + ACT Hybrid)
+
+```
+┌──────────────────────────────────────────┐
+│            CLAUDE VISION API             │
+│  1. Sees camera image of workspace       │
+│  2. Reads grid coordinates from mat      │
+│  3. Identifies sock pairs by color/      │
+│     pattern                              │
+│  4. Returns: "pick from B3, place at J1" │
+└──────────┬───────────────────────────────┘
+           │  ~1-2s per API call
+           │
+┌──────────▼───────────────────────────────┐
+│    COORDINATOR (Python on Jetson/Mac)    │
+│  - Captures camera frames (OpenCV)       │
+│  - Sends images to Claude API            │
+│  - Parses grid coords from response      │
+│  - Looks up joint angles from grid       │
+│    calibration table                     │
+│  - Commands arm via LeRobot              │
+│  - Loops: pick → verify → next           │
+└──────────┬───────────────────────────────┘
+           │  Feetech serial bus
+           │
+┌──────────▼───────────────────────────────┐
+│    SO-101 FOLLOWER ARM                   │
+│  - ACT policy for pick-and-place skill   │
+│    (OR direct joint position control     │
+│     via calibration lookup table)        │
+│  - 6x Feetech STS3215 servos            │
+│  - Stock rigid gripper (→ TPU if needed) │
+└──────────────────────────────────────────┘
+```
+
+### Claude API Call Pattern (per sorting run)
+
+| Phase | Calls | What Claude Does |
+|-------|-------|------------------|
+| Initial scan | 1 | Identify all socks + match pairs from camera image |
+| Per sock move | 1-2 | "Pick from X, place at Y" + verify after move |
+| Error recovery | ~5-10 | Re-scan after drops, failed grips |
+| **Total (30 socks)** | **~40-70** | **~$0.50-2.00 per full sort** |
+
+### Future Upgrade Path: SmolVLA
+
+[SmolVLA](https://huggingface.co/blog/smolvla) is a 450M param VLA from HuggingFace, trained on SO-100/101 data via LeRobot. Could replace ACT for the low-level pick-and-place skill. Keep Claude for high-level reasoning (pair matching, sort planning). SmolVLA may run on the Jetson Orin Nano (8GB, 67 TOPS) — needs testing.
 
 ## Gripper Options
 
@@ -165,16 +229,50 @@ lerobot-eval \
 - Wrist mount STL at `../so101-camera-mounts/wrist/`
 - Snap-on gripper camera mount ([Thingiverse](https://www.thingiverse.com/thing:7033586))
 
+## Training Data Collection
+
+### Camera Setup
+- **Top-down camera**: Directly above workspace pointing straight down. Captures full grid mat + sock positions.
+- **Front/side camera**: Eye-level, angled toward workspace. Captures gripper depth + sock grip quality.
+- Plug cameras **directly into USB ports** — NOT through a USB hub (too slow, drops frames).
+- **Mount cameras rigidly** — clamp, bracket, or tape. Never move after recording starts.
+
+### What to Train
+Train a **single pick-and-place skill**: home → approach → grasp → lift → move → release → home. The model does NOT decide which sock to pick — Claude handles that.
+
+### Episode Count
+- **50 episodes minimum** for reliable pick-and-place
+- Each episode: ~20-30 seconds of teleoperation
+- Total recording time: ~25-30 minutes
+
+### Variation (Critical)
+Vary across episodes to help the model generalize:
+- Pick from different grid positions (left, right, near, far)
+- Place at different target locations
+- Different approach angles
+- Different sock colors/sizes
+- Different gripper heights
+
+### Recording Tips
+- Watch through camera feeds, NOT directly at the follower arm
+- Clean workspace — nothing but grid mat + sock in frame
+- Consistent lighting (no moving shadows)
+- Remove clutter from camera view
+
+See `docs/recording-checklist.md` for the full pre-recording checklist.
+
 ## Known Issues / Gotchas
 
 - **Do NOT train on Mac MPS** — known gradient explosion / NaN loss with ACT on Apple Silicon ([GitHub #1066](https://github.com/huggingface/lerobot/issues/1066)). Train on Jetson (CUDA) only.
 - **ffmpeg 8.x not yet supported** by LeRobot — conda installs 8.x by default, may need to pin to 7.x if issues arise.
 - **Sock grasping is hard** — flat, floppy fabric. Start with stock gripper, escalate to TPU compliant if needed.
 - **Camera positions must be fixed** — never move between recording and evaluation. Model learns pixel-to-position mapping.
+- **USB cameras direct only** — no USB hubs, they drop frames at 30fps.
+- **120° wide-angle lens** — slight barrel distortion at edges. Fine for training; Claude may struggle reading grid labels at very edge of frame.
 
 ## Milestones
 
 1. **Day 1 (2026-03-20)**: Assemble arm, setup motors, calibrate, teleoperate
-2. **Weekend**: Record pick-and-place demos, train basic ACT on Jetson
-3. **Week 2**: Grid mat calibration, Claude Vision coordinator, 4-sock test (2 pairs)
-4. **Week 3**: Scale to 30 socks, iterate on gripper design
+2. **Weekend**: Mount cameras, record 50+ pick-and-place episodes, sync to Jetson, train ACT
+3. **Week 2**: Grid mat setup + coordinate labeling, grid-to-joint calibration, Claude Vision coordinator script, 4-sock test (2 pairs)
+4. **Week 3**: Scale to 30 socks (15 pairs), iterate on gripper (TPU compliant if needed)
