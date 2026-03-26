@@ -6,14 +6,15 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 
 ## Current Status
 
-- [x] LeRobot 0.5.1 installed (editable, from source at `./lerobot/`)
-- [x] Conda env `lerobot` (Python 3.12, PyTorch 2.10.0, MPS available)
+- [x] LeRobot 0.5.1 installed (editable, from source at `./lerobot/`) — Mac dev
+- [x] Conda env `lerobot` (Python 3.12, PyTorch 2.10.0, MPS available) — Mac dev
 - [x] Feetech servo SDK installed
 - [x] TPU compliant gripper STLs identified (SO-ARM100 repo)
 - [x] 2x USB cameras ordered (720p UVC, 120° DFOV, USB 2.0)
 - [x] Private GitHub repo created (mfzeidan/arm01)
-- [ ] Order dry-erase battle grid mat (~24x36", 1" squares)
-- [ ] Order TPU 95A filament (for compliant gripper, if needed)
+- [x] Dry-erase battle grid mat ordered (Melee Mats 35x48", 1" squares, arriving 2026-03-20)
+- [x] TPU 95A filament acquired (for compliant gripper, if needed)
+- [x] Jetson Orin Nano fully configured — Python 3.10, PyTorch 2.8.0 (CUDA SM 8.7 ✅), LeRobot v0.4.4, Feetech SDK, OpenCV, all deps (see `docs/jetson-setup.md`)
 - [ ] Arm hardware arrives 2026-03-20 (Friday)
 - [ ] Motor setup + calibration
 - [ ] Camera mounting + discovery
@@ -59,14 +60,15 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 
 | Component | Details |
 |-----------|---------|
-| Robot Arm | SO-101 (follower + leader), Feetech STS3215 servos, arriving 2026-03-20 |
+| Robot Arm | SO-101 (follower + leader), Feetech STS3215 servos |
+| USB Hub | j5create JCH342EW (USB-C to 4-port USB-A) — used on MacBook Air for servo boards. OK for serial; do NOT use for cameras (frame drops). |
 | Gripper | Stock rigid (default) + TPU compliant (Fin Ray, print from SO-ARM100 repo) |
 | Cameras | 2x 720p USB 2.0 UVC, 120° DFOV (top-down + front/side angle) |
 | Compute (training) | NVIDIA Jetson Orin Nano Super Developer Kit |
 | Compute (data collection) | Mac Mini M4 16GB |
 | Compute (development) | MacBook Air M4 16GB |
 | 3D Printer | Bambu Lab P1S (PLA + TPU 95A for compliant gripper) |
-| Workspace | Dry-erase battle grid mat (~24x36") with hand-labeled chess-style coordinates |
+| Workspace | Melee Mats DND battle grid mat (35x48", 1" squares, wet/dry erase) with hand-labeled chess-style coordinates |
 
 ## Coordinate System
 
@@ -94,11 +96,14 @@ arm01/
 
 | Layer | Tech |
 |-------|------|
-| Motor control | LeRobot 0.5.1 + Feetech SDK |
-| Policy training | ACT (Action Chunking Transformers) on Jetson (CUDA) |
+| Motor control (Jetson) | LeRobot v0.4.4 + Feetech SDK (`scservo_sdk`) — Python 3.10 |
+| Motor control (Mac dev) | LeRobot v0.5.0 + Feetech SDK — Python 3.12 |
+| Policy training | ACT (Action Chunking Transformers) on Jetson (CUDA 12.6) |
+| PyTorch (Jetson) | 2.8.0 from `pypi.jetson-ai-lab.io/jp6/cu126` (Python 3.10, SM 8.7, numpy 1.26.4) |
+| PyTorch (Mac dev) | 2.10.0 (MPS, Python 3.12) |
 | Vision/reasoning | Claude Vision API (Anthropic) |
 | Coordinator | Python (FastAPI or Flask) on Jetson |
-| Camera capture | OpenCV (`cv2.VideoCapture`) |
+| Camera capture | OpenCV 4.12.0 (`cv2.VideoCapture`) |
 | 3D design | OpenSCAD (parametric), Bambu Studio (slicer) |
 
 ## Key Commands
@@ -155,7 +160,7 @@ lerobot-eval \
 |--------|--------|
 | Mac Air (dev) | Local — current machine |
 | Mac Mini | SSH from Mac Air (TODO: document IP/hostname) |
-| Jetson Orin Nano | SSH from Mac Air — `ssh m@192.168.1.207` (alias: `ssh jetson`) |
+| Jetson Orin Nano | Tailscale: `ssh m@100.98.191.120` / Local WiFi: `ssh m@192.168.1.208` (DHCP, may change) |
 
 ## Shopping List
 
@@ -163,8 +168,8 @@ lerobot-eval \
 |------|--------|-------|
 | SO-101 arm kit (leader + follower) | Arriving 2026-03-20 | Includes Feetech STS3215 servos |
 | 2x 720p USB cameras (120° DFOV) | Ordered | UVC, plug-and-play on Mac/Jetson |
-| Dry-erase battle grid mat (24x36") | TODO | 1" squares, label with chess-style coordinates (A-J, 1-12) |
-| TPU 95A filament (1kg, 1.75mm) | TODO | For compliant gripper — only if stock gripper fails on socks |
+| Dry-erase battle grid mat (35x48") | Arriving 2026-03-20 | Melee Mats DND Starter Set, 1" squares, label with chess-style coordinates |
+| TPU 95A filament (1kg, 1.75mm) | Acquired | For compliant gripper — only if stock gripper fails on socks |
 | Test socks | TODO | 4-5 very distinct colors, cheap multi-packs for initial testing |
 
 ## Sock Sorting Architecture (Claude + ACT Hybrid)
@@ -264,11 +269,18 @@ See `docs/recording-checklist.md` for the full pre-recording checklist.
 ## Known Issues / Gotchas
 
 - **Do NOT train on Mac MPS** — known gradient explosion / NaN loss with ACT on Apple Silicon ([GitHub #1066](https://github.com/huggingface/lerobot/issues/1066)). Train on Jetson (CUDA) only.
+- **Jetson uses LeRobot v0.4.4, Mac uses v0.5.0** — v0.5.0 requires Python 3.12 (uses `type` statement syntax), but Jetson PyTorch wheels are cp310 only. v0.4.4 natively supports Python 3.10 and has all SO-101 features. Import paths differ slightly (e.g. `lerobot.motors.feetech.feetech` vs `lerobot.common.robot_devices.motors.feetech`).
+- **Jetson PyTorch must use NVIDIA wheels** — standard PyPI `torch` lacks SM 8.7 kernels for the Orin GPU. Install from `https://pypi.jetson-ai-lab.io/jp6/cu126` (use `curl`, not `wget`). See `docs/jetson-setup.md`.
+- **Jetson numpy pinned to 1.26.4** — Jetson torch 2.8.0 crashes with numpy 2.x. After any `pip install` that upgrades numpy, run: `pip install 'numpy==1.26.4' --force-reinstall --no-deps`
+- **Jetson wheels cached at `~/wheels/`** — the `pypi.jetson-ai-lab.io` index is unreliable (403s, outages). Always keep local wheel copies.
+- **Feetech SDK import name is `scservo_sdk`** — not `feetech_servo_sdk` despite the pip package being named `feetech-servo-sdk`.
+- **Non-interactive SSH needs conda sourced** — `ssh m@jetson "source ~/miniforge3/etc/profile.d/conda.sh && conda activate lerobot && ..."`.
 - **ffmpeg 8.x not yet supported** by LeRobot — conda installs 8.x by default, may need to pin to 7.x if issues arise.
 - **Sock grasping is hard** — flat, floppy fabric. Start with stock gripper, escalate to TPU compliant if needed.
 - **Camera positions must be fixed** — never move between recording and evaluation. Model learns pixel-to-position mapping.
 - **USB cameras direct only** — no USB hubs, they drop frames at 30fps.
 - **120° wide-angle lens** — slight barrel distortion at edges. Fine for training; Claude may struggle reading grid labels at very edge of frame.
+- **Jetson glibc 2.35 limit** — JetPack 6 (Ubuntu 22.04) cannot run wheels built for manylinux_2_38+. This blocks Python 3.12 torch wheels from the cu129 index.
 
 ## Milestones
 

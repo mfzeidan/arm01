@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-25",
+  "method": "manual_range_finding",
+  "notes": "User manually moved each joint to physical limits while encoder positions were recorded. Home is collapsed/parked position with gripper closed.",
+  "joints": {
+    "shoulder_pan":  {"id": 1, "min": 708,  "home": 2030, "max": 3445, "range": 2737, "min_desc": "left",           "max_desc": "right"},
+    "shoulder_lift": {"id": 2, "min": 799,  "home": 909,  "max": 2095, "range": 1296, "min_desc": "folded/home",    "max_desc": "raised up"},
+    "elbow_flex":    {"id": 3, "min": 949,  "home": 3185, "max": 3188, "range": 2239, "min_desc": "extended out",   "max_desc": "folded/home"},
+    "wrist_flex":    {"id": 4, "min": 6,    "home": 4007, "max": 4084, "range": 4078, "min_desc": "bent backward",  "max_desc": "folded/home"},
+    "wrist_roll":    {"id": 5, "min": 23,   "home": 2033, "max": 3946, "range": 3923, "min_desc": "clockwise",      "max_desc": "counter-clockwise"},
+    "gripper":       {"id": 6, "min": 899,  "home": 899,  "max": 2457, "range": 1558, "min_desc": "closed/home",    "max_desc": "open"}
+  }
+}
