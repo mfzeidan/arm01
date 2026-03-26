@@ -29,7 +29,7 @@ import scservo_sdk as scs
 PAN, LIFT, ELBOW, WRIST, ROLL, GRIP = 1, 2, 3, 4, 5, 6
 
 JOINTS = {
-    PAN:   {"min": 708,  "home": 2030, "max": 3445},
+    PAN:   {"min": 708,  "home": 2030, "max": 3100},
     LIFT:  {"min": 799,  "home": 909,  "max": 2095},
     ELBOW: {"min": 949,  "home": 3185, "max": 3188},
     WRIST: {"min": 6,    "home": 4007, "max": 4084},
