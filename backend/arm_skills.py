@@ -1,6 +1,6 @@
 """SO-101 arm movement skills for sock sorting.
 
-Calibrated positions from manual range-finding (2026-03-25/26).
+Calibrated positions from manual range-finding (2026-03-27).
 All positions are raw encoder values, no homing offsets.
 Goal_Velocity=0 = max speed on STS3215.
 
@@ -24,19 +24,18 @@ import scservo_sdk as scs
 PAN, LIFT, ELBOW, WRIST, ROLL, GRIP = 1, 2, 3, 4, 5, 6
 
 # ── Key positions (raw encoder) ───────────────────────────────────────────
-HOME = {PAN: 2017, LIFT: 803, ELBOW: 3190, WRIST: 4067, ROLL: 2038, GRIP: 913}
-TABLE = {LIFT: 2481, ELBOW: 1786, WRIST: 4300}  # bottom jaw flat on table as backstop
-VERTICAL = {LIFT: 2056, ELBOW: 1360, WRIST: 3140}  # no PAN — preserves current rotation
+HOME = {PAN: 2028, LIFT: 2084, ELBOW: 3092, WRIST: 889, ROLL: 2257, GRIP: 2016}
+TABLE = {LIFT: 2330, ELBOW: 2181, WRIST: 2526}  # bottom jaw at table level, grab position
+VERTICAL = {LIFT: 2068, ELBOW: 1009, WRIST: 1898}  # no PAN — preserves current rotation
 # HOVER: just above the table — same approach angle as TABLE but a bit higher
-# This ensures consistent grab angle regardless of where we transit from
-HOVER = {LIFT: 2300, ELBOW: 1786, WRIST: 4300}  # same angle as TABLE, just higher
-GRIP_OPEN = 2200
-GRIP_CLOSED = 899
+HOVER = {LIFT: 2250, ELBOW: 2181, WRIST: 2526}  # same angle as TABLE, just higher
+GRIP_OPEN = 3500
+GRIP_CLOSED = 2063
 
 # ── Safe pan limits ────────────────────────────────────────────────────────
 PAN_MIN = 708      # full left
 PAN_MAX = 3100     # right (camera mount limit)
-PAN_CENTER = 2017  # home/center
+PAN_CENTER = 2028  # home/center
 
 
 # ── Low-level helpers ──────────────────────────────────────────────────────
@@ -61,26 +60,32 @@ class Arm:
         self.port.setBaudRate(1000000)
         self.ph = scs.PacketHandler(0)
 
-        # Setup motors: unlock, clear offsets/limits, max torque
+        # Setup motors: unlock, clear offsets/limits, LOW torque to start
         for mid in range(1, 7):
             self._w8(mid, 55, 0)   # unlock
             self._w8(mid, 40, 0)   # torque off
             self._w16(mid, 19, 0)  # offset = 0
             self._w16(mid, 9, 0)   # min pos = 0
             self._w16(mid, 11, 4095)  # max pos = 4095
-            self._w16(mid, 16, 1000)  # max torque
-            time.sleep(0.05)
+            self._w16(mid, 16, 300)  # low torque for initial enable
+            time.sleep(0.1)
         time.sleep(0.3)
 
-        # Enable torque at current position, max speed
+        # Enable torque one at a time, staggered to avoid inrush spike
         for mid in range(1, 7):
             cur = self._r16(mid, 56)
             self._w16(mid, 42, cur)
             self._w16(mid, 48, 700)
             self._w8(mid, 41, 15)
-            self._w16(mid, 46, 0)   # max speed!
+            self._w16(mid, 46, 0)   # max speed
             self._w8(mid, 40, 1)
-            time.sleep(0.05)
+            time.sleep(0.5)  # 500ms between each servo enable
+        time.sleep(0.5)
+
+        # Ramp torque up to full
+        for mid in range(1, 7):
+            self._w16(mid, 16, 1000)
+            time.sleep(0.2)
         time.sleep(0.3)
         print(f"Arm connected on {path}")
 

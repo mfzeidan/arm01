@@ -281,6 +281,9 @@ See `docs/recording-checklist.md` for the full pre-recording checklist.
 - **USB cameras direct only** — no USB hubs, they drop frames at 30fps.
 - **120° wide-angle lens** — slight barrel distortion at edges. Fine for training; Claude may struggle reading grid labels at very edge of frame.
 - **Jetson glibc 2.35 limit** — JetPack 6 (Ubuntu 22.04) cannot run wheels built for manylinux_2_38+. This blocks Python 3.12 torch wheels from the cu129 index.
+- **Never dual-connect servos** — opening a second serial connection while arm_server runs corrupts servo EEPROM registers (lock bit, torque enable). Always use arm_server as the single connection point.
+- **`lerobot-teleoperate` is broken on SO-101** — crashes after 1-2 loops with `ConnectionError: Failed to sync read 'Present_Position'` ("no status packet"). Root cause: `teleop_loop` does a redundant `sync_read` on the follower every iteration alongside leader reads and follower writes, causing Feetech bus corruption. Known LeRobot bug (GitHub #3131, #1252, #1389), no upstream fix as of v0.5.0. **Use `scripts/teleop.py` instead** — it skips the follower read and runs reliably at 30Hz with zero errors. Retries, port clearing, and lower FPS do not fix `lerobot-teleoperate`.
+- **Servo controller boards need separate USB ports** — never use a USB hub for the servo boards. Two 1Mbaud serial devices through a shared hub causes additional bus corruption. Plug each arm directly into its own USB port.
 
 ## Milestones
 
