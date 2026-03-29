@@ -20,7 +20,7 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 - [ ] Camera mounting + discovery
 - [ ] Grid mat workspace setup + coordinate labeling
 - [ ] Grid-to-joint-angle calibration (one-time)
-- [ ] Pick-and-place training data collection (50+ episodes)
+- [ ] Pick-and-place training data collection (80-100 episodes, 3 sessions — see `docs/training-data-guide.md`)
 - [ ] ACT policy training on Jetson
 - [ ] Claude Vision coordinator script
 - [ ] 4-sock test (2 pairs, distinct colors)
@@ -236,27 +236,32 @@ lerobot-eval \
 
 ## Training Data Collection
 
-### Camera Setup
-- **Top-down camera**: Directly above workspace pointing straight down. Captures full grid mat + sock positions.
-- **Front/side camera**: Eye-level, angled toward workspace. Captures gripper depth + sock grip quality.
-- Plug cameras **directly into USB ports** — NOT through a USB hub (too slow, drops frames).
-- **Mount cameras rigidly** — clamp, bracket, or tape. Never move after recording starts.
+### Camera Setup (3 cameras)
+- **Right camera**: ~20" high, to the right of arm, looking down at workspace. Captures sock position + grid labels.
+- **Wrist camera**: Mounted on gripper. Moves with arm — close-up view of gripper-to-sock contact.
+- **Across camera**: Opposite side of arm, looking down at workspace. Second angle for depth/context.
+- Plug all 3 cameras **directly into USB ports** — NOT through a USB hub (too slow, drops frames).
+- **Mount right + across cameras rigidly** — clamp, bracket, or tape. Never move after recording starts.
+- Wrist camera moves with the arm — ensure cable has enough slack and won't snag.
 
 ### What to Train
-Train a **single pick-and-place skill**: home → approach → grasp → lift → move → release → home. The model does NOT decide which sock to pick — Claude handles that.
+Multiple manipulation skills — not just a single grab. See `docs/training-data-guide.md` for the full breakdown. The model does NOT decide which sock to pick — Claude handles that. The ACT policy only handles physical manipulation.
 
 ### Episode Count
-- **50 episodes minimum** for reliable pick-and-place
-- Each episode: ~20-30 seconds of teleoperation
-- Total recording time: ~25-30 minutes
+- **80-100 episodes** across 3 recording sessions (~60 min total teleoperation)
+- Each episode: ~20-30 seconds
+- **Session 1 (40 eps):** Pick flat socks, place on empty mat — grid coverage + sock variety
+- **Session 2 (25 eps):** Pick sock, place ON TOP of another sock (the actual sorting move)
+- **Session 3 (35 eps):** Bunched/folded socks + intentional failed grasps with recovery
 
 ### Variation (Critical)
 Vary across episodes to help the model generalize:
 - Pick from different grid positions (left, right, near, far)
-- Place at different target locations
+- Place at different target locations (empty mat AND on top of existing socks)
+- Different sock states (flat, bunched, folded, crumpled)
+- Different sock types (thin dress, thick athletic, different sizes)
 - Different approach angles
-- Different sock colors/sizes
-- Different gripper heights
+- Include failed grasps with re-approach recovery
 
 ### Recording Tips
 - Watch through camera feeds, NOT directly at the follower arm
