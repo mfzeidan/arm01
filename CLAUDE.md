@@ -236,11 +236,13 @@ lerobot-eval \
 
 ## Training Data Collection
 
-### Camera Setup
-- **Top-down camera**: Directly above workspace pointing straight down. Captures full grid mat + sock positions.
-- **Front/side camera**: Eye-level, angled toward workspace. Captures gripper depth + sock grip quality.
-- Plug cameras **directly into USB ports** — NOT through a USB hub (too slow, drops frames).
-- **Mount cameras rigidly** — clamp, bracket, or tape. Never move after recording starts.
+### Camera Setup (3 cameras)
+- **Right camera**: ~20" high, to the right of arm, looking down at workspace. Captures sock position + grid labels.
+- **Wrist camera**: Mounted on gripper. Moves with arm — close-up view of gripper-to-sock contact.
+- **Across camera**: Opposite side of arm, looking down at workspace. Second angle for depth/context.
+- Plug all 3 cameras **directly into USB ports** — NOT through a USB hub (too slow, drops frames).
+- **Mount right + across cameras rigidly** — clamp, bracket, or tape. Never move after recording starts.
+- Wrist camera moves with the arm — ensure cable has enough slack and won't snag.
 
 ### What to Train
 Multiple manipulation skills — not just a single grab. See `docs/training-data-guide.md` for the full breakdown. The model does NOT decide which sock to pick — Claude handles that. The ACT policy only handles physical manipulation.

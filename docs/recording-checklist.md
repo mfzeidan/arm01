@@ -5,19 +5,19 @@ Pre-recording checklist for SO-101 pick-and-place training episodes.
 ## Before You Start (One-Time Setup)
 
 - [ ] Arms assembled, motors set up, calibration complete
-- [ ] Both cameras plugged **directly into USB ports** (no hubs)
+- [ ] All 3 cameras plugged **directly into USB ports** (no hubs)
 - [ ] Run `lerobot-find-cameras` — note the index for each camera
-- [ ] Update `backend/.env` with camera indices and arm ports
-- [ ] Cameras rigidly mounted (clamp, bracket, tape — no wobbly tripods)
-- [ ] Top-down camera: directly above workspace, pointing straight down
-- [ ] Front/side camera: eye-level, angled toward workspace
-- [ ] Grid mat laid flat on workspace, coordinates visible to top camera
-- [ ] Verify camera views: `scripts/find_cameras.sh` — check both feeds
+- [ ] Update `backend/.env` with camera indices (`CAMERA_RIGHT_INDEX`, `CAMERA_WRIST_INDEX`, `CAMERA_ACROSS_INDEX`) and arm ports
+- [ ] Right camera: ~20" high, to the right of arm, looking down — rigidly mounted
+- [ ] Wrist camera: mounted on gripper, cable has slack and won't snag during moves
+- [ ] Across camera: opposite side of arm, looking down at workspace — rigidly mounted
+- [ ] Grid mat laid flat on workspace, coordinates visible to right + across cameras
+- [ ] Verify all 3 camera views: `lerobot-find-cameras` — check all feeds
 
 ## Before Each Recording Session
 
 - [ ] Workspace is clean — **nothing but grid mat + sock in frame**
-- [ ] No clutter visible to either camera
+- [ ] No clutter visible to any camera
 - [ ] Consistent lighting — no moving shadows, no windows with changing sunlight
 - [ ] Leader and follower arms powered on
 - [ ] Run `scripts/teleoperate.sh` briefly to confirm both arms respond
