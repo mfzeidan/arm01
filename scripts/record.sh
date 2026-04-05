@@ -37,7 +37,7 @@ lerobot-record \
     --dataset.repo_id="$DATASET_NAME" \
     --dataset.single_task="Pick and place sock" \
     --dataset.push_to_hub=false \
-    --dataset.episode_time_s=240 \
+    --dataset.episode_time_s=30 \
     --dataset.reset_time_s=10 \
     --display_data=true \
     $RESUME_FLAG
