@@ -1,14 +1,25 @@
-# Training Data Guide — Expanded Skills for Sock Sorting
+# Training Data Guide — Sock Sorting with Pi0.5 LoRA
 
-The original plan called for 50 episodes of a single "pick-and-place" skill. That's
-a reasonable start for rigid objects, but socks are uniquely challenging:
+## Policy: Pi0.5 (LoRA fine-tuning)
+
+We are using Pi0.5 (3B param VLA from Physical Intelligence) fine-tuned via LoRA,
+trained on the RTX Pro 4500 (32GB VRAM). Pi0.5 is pretrained on diverse manipulation
+data, so it needs **far fewer episodes** than ACT (which needed 80-100).
+
+**Current status:** 11 episodes recorded and training in progress. Evaluate the
+model first, then record targeted episodes for specific failure cases.
+
+## Why Socks Are Hard
+
+Socks are uniquely challenging for manipulation:
 
 - **Floppy and deformable** — flat spread, bunched, folded, crumpled
 - **Low-profile** — thin fabric lying flat is hard to grasp from above
 - **Stacking required** — sorting means placing one sock ON TOP of its match
 - **Variable grip** — thin dress socks vs thick athletic socks behave differently
 
-This guide defines the expanded set of training episodes needed for reliable sorting.
+Pi0.5's pretrained manipulation knowledge handles much of the general dexterity,
+but sock-specific scenarios may still need targeted training data.
 
 ## Skill Breakdown
 
@@ -83,55 +94,59 @@ picked up, or the sock slips during lift.
 - Some episodes: sock partially grabbed then dropped during lift
 - Recovery: slightly adjust approach angle or position before retry
 
-## Episode Count Summary
+## Episode Strategy with Pi0.5
 
-| Skill | Episodes | Time Est. |
-|-------|----------|-----------|
-| Pick flat sock | 30 | ~15 min |
-| Pick bunched sock | 20 | ~10 min |
-| Place on empty mat | 20 | ~10 min |
-| Place on top of sock | 25 | ~15 min |
-| Failed grasp recovery | 15 | ~10 min |
-| **Total** | **110** | **~60 min** |
+Pi0.5's pretrained knowledge means you don't need to teach basic manipulation from
+scratch. Instead, record episodes to teach your **specific workspace, sock types,
+and task**.
 
-Note: Pick and place naturally pair up in a single episode (you pick, then place).
-So "30 pick-flat + 20 place-empty" can overlap — a single episode records both
-the pick AND the place. The counts above reflect emphasis: ensure at least that
-many episodes feature each skill as the focus.
+### Phase 1: Basic Pick-and-Place (done — 11 episodes)
+Flat socks, simple pick and place. This is what was recorded initially.
 
-**Practical episode count: 80-100 episodes** with mixed pick/place combinations,
-ensuring each skill gets adequate representation.
+### Phase 2: Targeted Episodes (record after evaluating Phase 1 model)
+Only record what the model fails at. Evaluate, identify failure modes, then record
+5-10 targeted episodes per failure type:
 
-## Recording Strategy
+| Skill | Episodes | When to record |
+|-------|----------|----------------|
+| Pick flat sock | 11 (done) | Phase 1 — already recorded |
+| Pick bunched sock | 5-10 | If model fails on crumpled/folded socks |
+| Place on top of sock | 5-10 | If stacking accuracy is poor |
+| Failed grasp recovery | 5-10 | If model doesn't re-attempt after misses |
+| **Total estimate** | **20-30** | **Evaluate between phases** |
 
-### Session 1: Basic Pick-and-Place (40 episodes, ~30 min)
-- Flat socks only, place on empty mat
-- Focus on grid coverage — pick from every reachable zone
-- Mix sock types (have 4-5 different pairs on hand)
+This is dramatically fewer than the original 80-100 plan for ACT. The key insight:
+**don't record episodes for skills the pretrained model already handles.**
 
-### Session 2: Stacking (25 episodes, ~20 min)
+## Recording Strategy (Pi0.5 LoRA)
+
+### Evaluate-Then-Record Loop
+1. Train on current episodes
+2. Run inference on the arm, observe failure modes
+3. Record 5-10 episodes targeting specific failures
+4. Retrain (LoRA is fast on RTX Pro 4500)
+5. Repeat until performance is acceptable
+
+### If More Episodes Are Needed
+
+**Stacking session (~5-10 episodes):**
 - Pre-place a sock at the target position before each episode
 - Pick a matching sock, place it on top
 - Vary target sock state (flat vs slightly bunched)
 
-### Session 3: Bunched + Recovery (35 episodes, ~25 min)
+**Bunched sock session (~5-10 episodes):**
 - Crumple/fold socks before each episode
 - Include intentional failed grasps with recovery
-- Mix in some normal flat picks too for variety
 
 ## Dataset Organization
 
 Record everything into a single `sock_sorting` dataset. LeRobot handles
-episode indexing. The ACT policy learns from the full distribution — it doesn't
+episode indexing. Pi0.5 learns from the full distribution — it doesn't
 need separate skill labels.
 
 ```bash
-# Session 1
-./scripts/record.sh /dev/tty.FOLLOWER /dev/tty.LEADER sock_sorting
-
-# Sessions 2-3: resume from where you left off
-./scripts/record.sh /dev/tty.FOLLOWER /dev/tty.LEADER sock_sorting
-# Add --control.resume=true if interrupted
+# Record new episodes (resumes from last episode number)
+./scripts/record.sh /dev/tty.FOLLOWER /dev/tty.LEADER sock_sorting --resume
 ```
 
 ## What NOT to Train
@@ -140,7 +155,7 @@ need separate skill labels.
 - **Path planning between grid squares** — the coordinator + calibration table handles this
 - **Sorting order** — Claude decides which sock to pick next
 
-The ACT policy only needs to master the physical manipulation:
+The Pi0.5 policy only needs to master the physical manipulation:
 approach, grasp, lift, carry, place, release.
 
 ## Tips for Better Training Data

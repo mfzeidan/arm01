@@ -10,20 +10,22 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 - [x] Conda env `lerobot` (Python 3.12, PyTorch 2.10.0, MPS available) — Mac dev
 - [x] Feetech servo SDK installed
 - [x] TPU compliant gripper STLs identified (SO-ARM100 repo)
-- [x] 2x USB cameras ordered (720p UVC, 120° DFOV, USB 2.0)
+- [x] 2x USB cameras (720p UVC, 120° DFOV, USB 2.0)
 - [x] Private GitHub repo created (mfzeidan/arm01)
-- [x] Dry-erase battle grid mat ordered (Melee Mats 35x48", 1" squares, arriving 2026-03-20)
+- [x] Dry-erase battle grid mat (Melee Mats 35x48", 1" squares)
 - [x] TPU 95A filament acquired (for compliant gripper, if needed)
 - [x] Jetson Orin Nano fully configured — Python 3.10, PyTorch 2.8.0 (CUDA SM 8.7 ✅), LeRobot v0.4.4, Feetech SDK, OpenCV, all deps (see `docs/jetson-setup.md`)
-- [ ] Arm hardware arrives 2026-03-20 (Friday)
-- [ ] Motor setup + calibration
-- [ ] Camera mounting + discovery
-- [ ] Grid mat workspace setup + coordinate labeling
-- [ ] Grid-to-joint-angle calibration (one-time)
-- [ ] Pick-and-place training data collection (80-100 episodes, 3 sessions — see `docs/training-data-guide.md`)
-- [ ] ACT policy training on Jetson
+- [x] Arm hardware assembled + calibrated
+- [x] Motor setup + calibration
+- [x] Camera mounting + discovery (3 cameras: right, wrist, across)
+- [x] Grid mat workspace setup + coordinate labeling
+- [x] Grid-to-joint-angle calibration (7 points mapped)
+- [x] Training PC built — RTX Pro 4500 (32GB VRAM), Ryzen 9 9950X, 32GB DDR5 (see `docs/training-pc-build.md`)
+- [x] Pi0.5 LoRA fine-tuning — 11 episodes recorded, training in progress
+- [ ] Evaluate Pi0.5 model, record more episodes for failure cases if needed
 - [ ] Claude Vision coordinator script
 - [ ] 4-sock test (2 pairs, distinct colors)
+- [ ] Deploy inference to Mac Mini M4 (arm controller)
 - [ ] Scale to 30 socks (15 pairs)
 
 ## Architecture
@@ -39,11 +41,13 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
            │ camera images up / instructions down
            │
 ┌──────────▼──────────────────────────┐
-│   COORDINATOR (Python on Jetson)    │
+│   COORDINATOR (Python on Mac Mini)  │
 │  - Captures camera frames           │
 │  - Sends images to Claude API       │
 │  - Translates grid coords to arm    │
 │    joint positions via lookup table  │
+│  - Runs Pi0.5 inference for         │
+│    pick-and-place execution         │
 │  - Invokes LeRobot motor control    │
 └──────────┬──────────────────────────┘
            │ Feetech serial bus
@@ -64,7 +68,7 @@ Autonomous sock sorting using an SO-101 robot arm guided by Claude Vision API. C
 | USB Hub | j5create JCH342EW (USB-C to 4-port USB-A) — used on MacBook Air for servo boards. OK for serial; do NOT use for cameras (frame drops). |
 | Gripper | Stock rigid (default) + TPU compliant (Fin Ray, print from SO-ARM100 repo) |
 | Cameras | 2x 720p USB 2.0 UVC, 120° DFOV (top-down + front/side angle) |
-| Compute (training) | NVIDIA Jetson Orin Nano Super Developer Kit |
+| Compute (training) | Custom PC — RTX Pro 4500 32GB, Ryzen 9 9950X, 32GB DDR5 (see `docs/training-pc-build.md`) |
 | Compute (data collection) | Mac Mini M4 16GB |
 | Compute (development) | MacBook Air M4 16GB |
 | 3D Printer | Bambu Lab P1S (PLA + TPU 95A for compliant gripper) |
@@ -96,13 +100,14 @@ arm01/
 
 | Layer | Tech |
 |-------|------|
-| Motor control (Jetson) | LeRobot v0.4.4 + Feetech SDK (`scservo_sdk`) — Python 3.10 |
-| Motor control (Mac dev) | LeRobot v0.5.0 + Feetech SDK — Python 3.12 |
-| Policy training | ACT (Action Chunking Transformers) on Jetson (CUDA 12.6) |
-| PyTorch (Jetson) | 2.8.0 from `pypi.jetson-ai-lab.io/jp6/cu126` (Python 3.10, SM 8.7, numpy 1.26.4) |
+| Motor control (Mac dev) | LeRobot v0.5.0 + Feetech SDK (`scservo_sdk`) — Python 3.12 |
+| Policy training | Pi0.5 (3B params, LoRA fine-tuning) on Training PC (RTX Pro 4500, CUDA) |
+| Policy (fallback) | ACT (Action Chunking Transformers) — lighter, fewer VRAM requirements |
+| PyTorch (Training PC) | Latest stable (CUDA, RTX Pro 4500) |
 | PyTorch (Mac dev) | 2.10.0 (MPS, Python 3.12) |
 | Vision/reasoning | Claude Vision API (Anthropic) |
-| Coordinator | Python (FastAPI or Flask) on Jetson |
+| Inference (deployment) | Mac Mini M4 16GB — runs Pi0.5 inference + arm control |
+| Coordinator | Python (FastAPI or Flask) on Mac Mini |
 | Camera capture | OpenCV 4.12.0 (`cv2.VideoCapture`) |
 | 3D design | OpenSCAD (parametric), Bambu Studio (slicer) |
 
@@ -141,11 +146,11 @@ lerobot-record \
   --teleop.type=so101_leader --teleop.port=/dev/tty.LEADER \
   --dataset.repo_id=sock_sorting --dataset.push_to_hub=false
 
-# Train ACT policy (on Jetson)
+# Train Pi0.5 LoRA (on Training PC — RTX Pro 4500)
 lerobot-train \
   --dataset.repo_id=sock_sorting \
   --dataset.root=/path/to/data \
-  --policy.type=act \
+  --policy.type=pi0 \
   --policy.push_to_hub=false
 
 # Eval (autonomous)
@@ -156,23 +161,25 @@ lerobot-eval \
 
 ## Network / Access
 
-| Device | Access |
-|--------|--------|
-| Mac Air (dev) | Local — current machine |
-| Mac Mini | SSH from Mac Air (TODO: document IP/hostname) |
-| Jetson Orin Nano | Tailscale: `ssh m@100.98.191.120` / Local WiFi: `ssh m@192.168.1.208` (DHCP, may change) |
+| Device | Access | Role |
+|--------|--------|------|
+| Mac Air (dev) | Local — current machine | Development |
+| Mac Mini M4 16GB | SSH from Mac Air (TODO: document IP/hostname) | Data collection + inference/deployment (runs arm) |
+| Training PC | TODO: document IP/hostname | Pi0.5 LoRA training (RTX Pro 4500) |
+| Jetson Orin Nano | Tailscale: `ssh m@100.98.191.120` / Local WiFi: `ssh m@192.168.1.208` (DHCP, may change) | Backup/lightweight inference |
 
 ## Shopping List
 
 | Item | Status | Notes |
 |------|--------|-------|
-| SO-101 arm kit (leader + follower) | Arriving 2026-03-20 | Includes Feetech STS3215 servos |
-| 2x 720p USB cameras (120° DFOV) | Ordered | UVC, plug-and-play on Mac/Jetson |
-| Dry-erase battle grid mat (35x48") | Arriving 2026-03-20 | Melee Mats DND Starter Set, 1" squares, label with chess-style coordinates |
+| SO-101 arm kit (leader + follower) | Received | Assembled, calibrated, operational |
+| 2x 720p USB cameras (120° DFOV) | Received | UVC, plug-and-play, 3 cameras in use (right, wrist, across) |
+| Dry-erase battle grid mat (35x48") | Received | Melee Mats DND Starter Set, 1" squares, coordinates labeled |
+| Training PC (RTX Pro 4500) | Built | See `docs/training-pc-build.md` |
 | TPU 95A filament (1kg, 1.75mm) | Acquired | For compliant gripper — only if stock gripper fails on socks |
-| Test socks | TODO | 4-5 very distinct colors, cheap multi-packs for initial testing |
+| Test socks | In use | Puma crew/ankle socks, black/gray/white mix |
 
-## Sock Sorting Architecture (Claude + ACT Hybrid)
+## Sock Sorting Architecture (Claude + Pi0.5 Hybrid)
 
 ```
 ┌──────────────────────────────────────────┐
@@ -186,12 +193,12 @@ lerobot-eval \
            │  ~1-2s per API call
            │
 ┌──────────▼───────────────────────────────┐
-│    COORDINATOR (Python on Jetson/Mac)    │
+│    COORDINATOR (Python on Mac Mini)      │
 │  - Captures camera frames (OpenCV)       │
 │  - Sends images to Claude API            │
 │  - Parses grid coords from response      │
-│  - Looks up joint angles from grid       │
-│    calibration table                     │
+│  - Runs Pi0.5 LoRA model for             │
+│    pick-and-place execution              │
 │  - Commands arm via LeRobot              │
 │  - Loops: pick → verify → next           │
 └──────────┬───────────────────────────────┘
@@ -199,9 +206,8 @@ lerobot-eval \
            │
 ┌──────────▼───────────────────────────────┐
 │    SO-101 FOLLOWER ARM                   │
-│  - ACT policy for pick-and-place skill   │
-│    (OR direct joint position control     │
-│     via calibration lookup table)        │
+│  - Pi0.5 policy for pick-and-place       │
+│    (LoRA fine-tuned, 11+ episodes)       │
 │  - 6x Feetech STS3215 servos            │
 │  - Stock rigid gripper (→ TPU if needed) │
 └──────────────────────────────────────────┘
@@ -216,9 +222,16 @@ lerobot-eval \
 | Error recovery | ~5-10 | Re-scan after drops, failed grips |
 | **Total (30 socks)** | **~40-70** | **~$0.50-2.00 per full sort** |
 
-### Future Upgrade Path: SmolVLA
+### Policy: Pi0.5 (LoRA)
 
-[SmolVLA](https://huggingface.co/blog/smolvla) is a 450M param VLA from HuggingFace, trained on SO-100/101 data via LeRobot. Could replace ACT for the low-level pick-and-place skill. Keep Claude for high-level reasoning (pair matching, sort planning). SmolVLA may run on the Jetson Orin Nano (8GB, 67 TOPS) — needs testing.
+[Pi0.5](https://www.physicalintelligence.company/research/pi0-5) is a 3B param VLA from Physical Intelligence. Fine-tuned via LoRA on 11 teleoperation episodes recorded on the SO-101. Trained on the RTX Pro 4500 (32GB VRAM). Pi0.5's pretrained manipulation knowledge means far fewer episodes than ACT (which needed 80-100). Evaluate current model, then record targeted episodes for failure cases (bunched socks, stacking, recovery).
+
+**Inference deployment:** Mac Mini M4 (16GB unified memory) — runs Pi0.5 at the arm without quantization. The training PC stays as the training-only machine.
+
+### Alternative Policies
+
+- **SmolVLA** — 450M param VLA from HuggingFace, trained on SO-100/101 data via LeRobot. Smaller than Pi0.5, could run on Jetson Orin Nano (8GB). Worth testing as a lighter alternative.
+- **ACT** — 20M param, the original plan. Much lighter, needs 80-100 episodes. Fallback if VLAs prove too heavy for real-time inference.
 
 ## Gripper Options
 
@@ -245,14 +258,16 @@ lerobot-eval \
 - Wrist camera moves with the arm — ensure cable has enough slack and won't snag.
 
 ### What to Train
-Multiple manipulation skills — not just a single grab. See `docs/training-data-guide.md` for the full breakdown. The model does NOT decide which sock to pick — Claude handles that. The ACT policy only handles physical manipulation.
+The Pi0.5 policy handles physical manipulation only — Claude decides which sock to pick. Pi0.5's pretrained knowledge drastically reduces episode requirements vs ACT.
 
-### Episode Count
-- **80-100 episodes** across 3 recording sessions (~60 min total teleoperation)
-- Each episode: ~20-30 seconds
-- **Session 1 (40 eps):** Pick flat socks, place on empty mat — grid coverage + sock variety
-- **Session 2 (25 eps):** Pick sock, place ON TOP of another sock (the actual sorting move)
-- **Session 3 (35 eps):** Bunched/folded socks + intentional failed grasps with recovery
+### Episode Count (Pi0.5 LoRA)
+- **11 episodes recorded** (initial training round)
+- Evaluate model performance, then record targeted episodes for failure cases:
+  - Bunched/crumpled socks (different grasp approach)
+  - Stacking onto another sock (height changes)
+  - Recovery from missed grasps
+- Expect **20-30 total episodes** to be sufficient (vs 80-100 for ACT)
+- See `docs/training-data-guide.md` for skill breakdown and variation tips
 
 ### Variation (Critical)
 Vary across episodes to help the model generalize:
@@ -292,7 +307,9 @@ See `docs/recording-checklist.md` for the full pre-recording checklist.
 
 ## Milestones
 
-1. **Day 1 (2026-03-20)**: Assemble arm, setup motors, calibrate, teleoperate
-2. **Weekend**: Mount cameras, record 50+ pick-and-place episodes, sync to Jetson, train ACT
-3. **Week 2**: Grid mat setup + coordinate labeling, grid-to-joint calibration, Claude Vision coordinator script, 4-sock test (2 pairs)
-4. **Week 3**: Scale to 30 socks (15 pairs), iterate on gripper (TPU compliant if needed)
+1. ~~**Day 1 (2026-03-20)**: Assemble arm, setup motors, calibrate, teleoperate~~ ✅
+2. ~~**Week 1**: Mount cameras, grid calibration, build training PC~~ ✅
+3. ~~**Week 2**: Record episodes, begin Pi0.5 LoRA training~~ ✅ (11 episodes recorded)
+4. **Now**: Evaluate Pi0.5 model, record targeted episodes for failure cases, deploy inference to Mac Mini
+5. **Next**: Claude Vision coordinator script, 4-sock test (2 pairs)
+6. **After**: Scale to 30 socks (15 pairs), iterate on gripper (TPU compliant if needed)
